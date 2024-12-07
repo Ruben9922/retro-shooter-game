@@ -79,7 +79,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-
-func (v vector2d) equals(v2 vector2d) bool {
-	return v.x == v2.x && v.y == v2.y
-}

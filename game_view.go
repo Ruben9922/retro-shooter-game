@@ -154,7 +154,7 @@ func (gv *gameView) handleCollisions() {
 		}
 
 		for enemyPositionIndex, enemyPosition := range gv.enemyPositions[y] {
-			if bulletPosition.equals(enemyPosition) {
+			if bulletPosition == enemyPosition {
 				enemyPositionsDeleted[y] = append(enemyPositionsDeleted[y], enemyPositionIndex)
 				bulletPositionsDeleted = append(bulletPositionsDeleted, bulletPositionIndex)
 
