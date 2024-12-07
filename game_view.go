@@ -88,14 +88,15 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 }
 
 func (gv *gameView) updateEnemies() {
+	// If either end of the row is reached...
 	if gv.tickCount >= gameViewSize.x-enemyColumnCount-(enemySpacing*(enemyColumnCount-1)) {
 		gv.tickCount = 0
 
-		// If enemies have reached the bottom of the screen then it's game over
 		if gv.enemyPositions[len(gv.enemyPositions)-1][0].y >= gameViewSize.y-2 {
+			// If enemies have reached the bottom of the screen then it's game over
 			gv.gameOver = true
 		} else {
-			// Move enemies down when they reach either end of the row
+			// Else move enemies down
 			for i := range gv.enemyPositions {
 				row := &gv.enemyPositions[i]
 				for j := range *row {
