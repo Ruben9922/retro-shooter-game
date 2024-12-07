@@ -118,26 +118,6 @@ func (gv *gameView) updateBullets() {
 }
 
 func (gv *gameView) handleCollisions() {
-	// todo: not needed
-	// Copy `updatedBulletPositions`
-	//updatedBulletPositions := make([]vector2d, len(gv.bulletPositions))
-	//copy(updatedBulletPositions, gv.bulletPositions)
-
-	// Copy `gv.enemyPositions`
-	//updatedEnemyPositions := make([][]vector2d, 0, len(gv.enemyPositions))
-	//for _, row := range updatedEnemyPositions {
-	//	updatedRow := make([]vector2d, len(row))
-	//	copy(updatedRow, row)
-	//	updatedEnemyPositions = append(updatedEnemyPositions, updatedRow)
-	//}
-
-	// todo: can probably just remove this!
-	// Don't want indices to be created in another thread until the current thread's indices have been deleted
-	// E.g. 1st thread wants to delete index 1, 2nd thread wants to delete index 2, 1st thread deletes index 1, 2nd
-	// thread might error if index 2 no longer exists as the elements has been shifted left by 1st thread
-	//gv.mu.Lock()
-	//defer gv.mu.Unlock()
-
 	// todo: can simplify by setting positions to some "blank" value, then removing them (don't need to store deleted indices)
 	// todo: kinda inefficient, probably want to improve this e.g. using maps
 	// todo: potentially improve this - basically storing indices of positions to remove then removing them afterwards
