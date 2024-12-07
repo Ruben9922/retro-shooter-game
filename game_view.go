@@ -4,7 +4,6 @@ import (
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"slices"
 	"strings"
 )
 
@@ -13,11 +12,11 @@ var gameViewSize = vector2d{x: 50, y: 15}
 
 const enemySpacing = 1
 const enemyColumnCount = 10
-const scorePerHit = 1
 
 type gameView struct {
 	playerPosition  vector2d
 	enemyPositions  [][]vector2d
+	enemyYOffset    int
 	tickCount       int
 	bulletPositions []vector2d
 	score           int
@@ -92,7 +91,7 @@ func (gv *gameView) updateEnemies() {
 	if gv.tickCount >= gameViewSize.x-enemyColumnCount-(enemySpacing*(enemyColumnCount-1)) {
 		gv.tickCount = 0
 
-		if gv.enemyPositions[len(gv.enemyPositions)-1][0].y >= gameViewSize.y-2 {
+		if gv.enemyYOffset+len(gv.enemyPositions)-1 >= gameViewSize.y-2 {
 			// If enemies have reached the bottom of the screen then it's game over
 			gv.gameOver = true
 		} else {
@@ -102,6 +101,7 @@ func (gv *gameView) updateEnemies() {
 				for j := range *row {
 					position := &(*row)[j]
 					position.y++
+					gv.enemyYOffset++
 				}
 			}
 		}
@@ -137,56 +137,49 @@ func (gv *gameView) updateBullets() {
 }
 
 func (gv *gameView) handleCollisions() {
-	// todo: can simplify by setting positions to some "blank" value, then removing them (don't need to store deleted indices)
-	// todo: kinda inefficient, probably want to improve this e.g. using maps
-	// todo: potentially improve this - basically storing indices of positions to remove then removing them afterwards
-	bulletPositionsDeleted := make([]int, 0, len(gv.bulletPositions))
-	enemyPositionsDeleted := make([][]int, 0, len(gv.enemyPositions))
+	// Instead of nested loops, create a map for the enemies, iterate through the bullet and do a lookup on the map
+	enemyPositionMap := make(map[int]map[int]struct{})
+
+	// Convert enemy slice into map
 	for _, row := range gv.enemyPositions {
-		enemyPositionsDeleted = append(enemyPositionsDeleted, make([]int, 0, len(row)))
-	}
-	for bulletPositionIndex, bulletPosition := range gv.bulletPositions {
-		y := bulletPosition.y
-
-		// Needed because bullet can be anywhere in the matrix, but `gv.enemyPositions` only has indexes for first few rows
-		// i.e. because y can be greater than len(gv.enemyPositions)
-		if y < 0 || y >= len(gv.enemyPositions) {
-			continue
-		}
-
-		for enemyPositionIndex, enemyPosition := range gv.enemyPositions[y] {
-			if bulletPosition == enemyPosition {
-				enemyPositionsDeleted[y] = append(enemyPositionsDeleted[y], enemyPositionIndex)
-				bulletPositionsDeleted = append(bulletPositionsDeleted, bulletPositionIndex)
-
-				gv.score += scorePerHit
+		for _, position := range row {
+			if _, yIsPresent := enemyPositionMap[position.y]; !yIsPresent {
+				enemyPositionMap[position.y] = make(map[int]struct{})
 			}
+
+			enemyPositionMap[position.y][position.x] = struct{}{}
 		}
 	}
 
-	// Filter out deleted bullet positions
-	// Don't want to call `slices.Delete` for each deleted index because that shifts subsequent elements left which
-	// could make indices out-of-date
 	updatedBulletPositions := make([]vector2d, 0, len(gv.bulletPositions))
-	for i, position := range gv.bulletPositions {
-		if !slices.Contains(bulletPositionsDeleted, i) {
+	for _, position := range gv.bulletPositions {
+		xMap, yIsPresent := enemyPositionMap[position.y]
+		_, xIsPresent := xMap[position.x]
+		collision := yIsPresent && xIsPresent
+		if collision {
+			delete(xMap, position.x)
+			gv.score++
+		} else {
 			updatedBulletPositions = append(updatedBulletPositions, position)
 		}
 	}
-	gv.bulletPositions = updatedBulletPositions
 
-	// Filter out deleted enemy positions
-	updatedEnemyPositions := make([][]vector2d, 0, len(gv.enemyPositions))
-	for y, row := range gv.enemyPositions {
-		updatedRow := make([]vector2d, 0, len(row))
-		for i, position := range row {
-			if !slices.Contains(enemyPositionsDeleted[y], i) {
-				updatedRow = append(updatedRow, position)
-			}
-		}
-		updatedEnemyPositions = append(updatedEnemyPositions, updatedRow)
+	// Convert enemy map back into a slice
+	updatedEnemyPositions := make([][]vector2d, 5)
+	for i := range updatedEnemyPositions {
+		updatedEnemyPositions[i] = make([]vector2d, 0)
 	}
+	for y, xMap := range enemyPositionMap {
+		for x := range xMap {
+			enemyRowIndex := y - gv.enemyYOffset
+			enemyRow := &updatedEnemyPositions[enemyRowIndex]
+			position := vector2d{x: x, y: y}
+			*enemyRow = append(*enemyRow, position)
+		}
+	}
+
 	gv.enemyPositions = updatedEnemyPositions
+	gv.bulletPositions = updatedBulletPositions
 }
 
 func (gv *gameView) draw(model) string {
