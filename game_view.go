@@ -16,22 +16,21 @@ const enemyColumnCount = 10
 const scorePerHit = 1
 
 type gameView struct {
-	playerPosition     vector2d
-	enemyPositions     [][]vector2d
-	tickCount          int
-	enemyUpdateFlipped bool
-	bulletPositions    []vector2d
-	score              int
+	playerPosition  vector2d
+	enemyPositions  [][]vector2d
+	tickCount       int
+	bulletPositions []vector2d
+	score           int
+	gameOver        bool
 }
 
 func newGameView() *gameView {
 	return &gameView{
-		playerPosition:     vector2d{x: gameViewSize.x / 2, y: gameViewSize.y - 1},
-		enemyPositions:     generateEnemyPositions(),
-		tickCount:          0,
-		enemyUpdateFlipped: false,
-		bulletPositions:    make([]vector2d, 0),
-		score:              0,
+		playerPosition:  vector2d{x: gameViewSize.x / 2, y: gameViewSize.y - 1},
+		enemyPositions:  generateEnemyPositions(),
+		tickCount:       0,
+		bulletPositions: make([]vector2d, 0),
+		score:           0,
 	}
 }
 
@@ -73,35 +72,54 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			gv.bulletPositions = append(gv.bulletPositions, newBullet)
 		}
 	case bulletTickMsg:
-		gv.updateBullets()
-		gv.handleCollisions()
+		if !gv.gameOver {
+			gv.updateBullets()
+			gv.handleCollisions()
+		}
 		return m, bulletTickCmd()
 	case enemyTickMsg:
-		gv.updateEnemies()
-		gv.handleCollisions()
+		if !gv.gameOver {
+			gv.updateEnemies()
+			gv.handleCollisions()
+		}
 		return m, enemyTickCmd()
 	}
 	return m, nil
 }
 
 func (gv *gameView) updateEnemies() {
-	for i := range gv.enemyPositions {
-		row := &gv.enemyPositions[i]
-		for j := range *row {
-			position := &(*row)[j]
-			// XOR `position.y%2 == 0` with `!gv.enemyUpdateFlipped`
-			if (position.y%2 == 0) == gv.enemyUpdateFlipped {
-				position.x--
-			} else {
-				position.x++
-			}
-		}
-	}
-
-	gv.tickCount++
 	if gv.tickCount >= gameViewSize.x-enemyColumnCount-(enemySpacing*(enemyColumnCount-1)) {
 		gv.tickCount = 0
-		gv.enemyUpdateFlipped = !gv.enemyUpdateFlipped
+
+		// If enemies have reached the bottom of the screen then it's game over
+		if gv.enemyPositions[len(gv.enemyPositions)-1][0].y >= gameViewSize.y-2 {
+			gv.gameOver = true
+		} else {
+			// Move enemies down when they reach either end of the row
+			for i := range gv.enemyPositions {
+				row := &gv.enemyPositions[i]
+				for j := range *row {
+					position := &(*row)[j]
+					position.y++
+				}
+			}
+		}
+	} else {
+		gv.tickCount++
+
+		// Move enemies left/right (move alternate rows in opposite directions, so 1st row left/right, then 2nd row right/left, etc.)
+		for i := range gv.enemyPositions {
+			row := &gv.enemyPositions[i]
+			for j := range *row {
+
+				position := &(*row)[j]
+				if position.y%2 == 0 {
+					position.x++
+				} else {
+					position.x--
+				}
+			}
+		}
 	}
 }
 
@@ -197,9 +215,9 @@ func newOutputMatrix() (outputMatrix [][]rune) {
 }
 
 func (gv *gameView) drawEnemies(outputMatrix *[][]rune) {
-	for y, row := range gv.enemyPositions {
+	for _, row := range gv.enemyPositions {
 		for _, position := range row {
-			(*outputMatrix)[y][position.x] = '$'
+			(*outputMatrix)[position.y][position.x] = '$'
 		}
 	}
 }
