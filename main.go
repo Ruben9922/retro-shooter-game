@@ -32,16 +32,17 @@ func initialModel() model {
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(bulletTickCmd(), enemyTickCmd())
+	return enemyTickCmd()
 }
 
+// This runs all the time
 func enemyTickCmd() tea.Cmd {
 	return tea.Tick(900*time.Millisecond, func(t time.Time) tea.Msg {
 		return enemyTickMsg(t)
 	})
 }
 
-// todo: only use this if there are any bullets
+// This only runs if there are any bullets, it gets dynamically started/stopped as necessary when bullets are created/destroyed
 func bulletTickCmd() tea.Cmd {
 	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
 		return bulletTickMsg(t)

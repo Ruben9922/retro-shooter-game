@@ -59,7 +59,7 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			if msg.String() == "enter" {
 				m.view = newGameView()
 			}
-			return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
+			return m, enemyTickCmd()
 		}
 
 		switch msg.String() {
@@ -77,12 +77,22 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 				y: gameViewSize.y - 2,
 			}
 			gv.bulletPositions = append(gv.bulletPositions, newBullet)
+
+			// If there's only one bullet, the timer isn't running so we need to start it off
+			// If there's >1 bullet, the timer is already running so don't need to start it off again
+			if len(gv.bulletPositions) == 1 {
+				return m, bulletTickCmd()
+			}
 		}
 	case bulletTickMsg:
 		if !gv.gameOver {
 			gv.updateBullets()
 			gv.handleCollisions()
-			return m, bulletTickCmd()
+
+			// If there aren't any bullets then effectively stop the timer by not returning a `bulletTickCmd`
+			if len(gv.bulletPositions) > 0 {
+				return m, bulletTickCmd()
+			}
 		}
 	case enemyTickMsg:
 		if !gv.gameOver {
