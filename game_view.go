@@ -55,6 +55,13 @@ func generateEnemyPositions() (enemyPositions map[int]map[int]struct{}) {
 func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if gv.gameOver {
+			if msg.String() == "enter" {
+				m.view = newGameView()
+			}
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "left", "a":
 			if gv.playerPosition.x > 1 {
@@ -185,8 +192,12 @@ func (gv *gameView) draw(model) string {
 
 	mainString := outputMatrixToString(outputMatrix)
 	scoreString := fmt.Sprintf("Score: %d", gv.score)
+	var gameOverString string
+	if gv.gameOver {
+		gameOverString = lipgloss.NewStyle().PaddingTop(1).Render("Game over! Press Enter to restart...")
+	}
 
-	return lipgloss.JoinVertical(lipgloss.Right, style.Render(mainString), scoreString)
+	return lipgloss.JoinVertical(lipgloss.Left, style.Render(mainString), scoreString, gameOverString)
 }
 
 func newOutputMatrix() (outputMatrix [][]rune) {
