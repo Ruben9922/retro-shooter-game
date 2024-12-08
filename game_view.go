@@ -21,6 +21,7 @@ type gameView struct {
 	bulletPositions []vector2d
 	score           int
 	gameOver        bool
+	paused          bool
 }
 
 func newGameView() *gameView {
@@ -62,6 +63,18 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			return m, enemyTickCmd()
 		}
 
+		if gv.paused {
+			if msg.String() == "p" {
+				gv.paused = false
+			}
+
+			if len(gv.bulletPositions) > 0 {
+				return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
+			} else {
+				return m, enemyTickCmd()
+			}
+		}
+
 		switch msg.String() {
 		case "left", "a":
 			if gv.playerPosition.x > 1 {
@@ -83,9 +96,11 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			if len(gv.bulletPositions) == 1 {
 				return m, bulletTickCmd()
 			}
+		case "p":
+			gv.paused = true
 		}
 	case bulletTickMsg:
-		if !gv.gameOver {
+		if !gv.gameOver && !gv.paused {
 			gv.updateBullets()
 			gv.handleCollisions()
 
@@ -95,7 +110,7 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			}
 		}
 	case enemyTickMsg:
-		if !gv.gameOver {
+		if !gv.gameOver && !gv.paused {
 			gv.updateEnemies()
 			gv.handleCollisions()
 			return m, enemyTickCmd()
@@ -202,12 +217,14 @@ func (gv *gameView) draw(model) string {
 
 	mainString := outputMatrixToString(outputMatrix)
 	scoreString := fmt.Sprintf("Score: %d", gv.score)
-	var gameOverString string
+	var statusString string
 	if gv.gameOver {
-		gameOverString = lipgloss.NewStyle().PaddingTop(1).Render("Game over! Press Enter to restart...")
+		statusString = "Game over! Press Enter to restart..."
+	} else if gv.paused {
+		statusString = "Paused; press P to resume..."
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, style.Render(mainString), scoreString, gameOverString)
+	return lipgloss.JoinVertical(lipgloss.Left, style.Render(mainString), scoreString, lipgloss.NewStyle().PaddingTop(1).Render(statusString))
 }
 
 func newOutputMatrix() (outputMatrix [][]rune) {
