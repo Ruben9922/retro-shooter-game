@@ -15,8 +15,8 @@ const enemyColumnCount = 10
 
 type gameView struct {
 	playerPosition  vector2d
-	enemyPositions  [][]vector2d
-	enemyYOffset    int
+	enemyPositions  map[int]map[int]struct{}
+	enemyYOffset    int // Easier to just store this instead of traversing through the map to find the min y value
 	tickCount       int
 	bulletPositions []vector2d
 	score           int
@@ -33,19 +33,20 @@ func newGameView() *gameView {
 	}
 }
 
-func generateEnemyPositions() (enemyPositions [][]vector2d) {
+func generateEnemyPositions() (enemyPositions map[int]map[int]struct{}) {
 	const rowCount = 5
-	enemyPositions = make([][]vector2d, 0, rowCount)
-	for y := 0; y < rowCount; y++ {
-		enemyPositions = append(enemyPositions, make([]vector2d, 0, enemyColumnCount))
+	enemyPositions = make(map[int]map[int]struct{}, rowCount)
+	for i := 0; i < rowCount; i++ {
+		enemyPositions[i] = make(map[int]struct{}, enemyColumnCount)
+
 		for columnIndex := 0; columnIndex < enemyColumnCount; columnIndex++ {
 			var x int
-			if y%2 == 0 {
+			if i%2 == 0 {
 				x = columnIndex * 2
 			} else {
 				x = gameViewSize.x - (columnIndex * 2) - 1
 			}
-			enemyPositions[y] = append(enemyPositions[y], vector2d{x: x, y: y})
+			enemyPositions[i][x] = struct{}{}
 		}
 	}
 	return
@@ -96,31 +97,48 @@ func (gv *gameView) updateEnemies() {
 			gv.gameOver = true
 		} else {
 			// Else move enemies down
-			for i := range gv.enemyPositions {
-				row := &gv.enemyPositions[i]
-				for j := range *row {
-					position := &(*row)[j]
-					position.y++
-					gv.enemyYOffset++
+			updatedEnemyPositions := make(map[int]map[int]struct{}, len(gv.enemyPositions))
+			for y, xMap := range gv.enemyPositions {
+				for x := range xMap {
+					position := vector2d{x: x, y: y}
+
+					updatedPosition := position
+					updatedPosition.y++
+
+					if _, isYPresent := updatedEnemyPositions[updatedPosition.y]; !isYPresent {
+						updatedEnemyPositions[updatedPosition.y] = make(map[int]struct{}, len(gv.enemyPositions[position.y]))
+					}
+
+					updatedEnemyPositions[updatedPosition.y][updatedPosition.x] = struct{}{}
 				}
 			}
+			gv.enemyYOffset++
+			gv.enemyPositions = updatedEnemyPositions
 		}
 	} else {
 		gv.tickCount++
 
 		// Move enemies left/right (move alternate rows in opposite directions, so 1st row left/right, then 2nd row right/left, etc.)
-		for i := range gv.enemyPositions {
-			row := &gv.enemyPositions[i]
-			for j := range *row {
+		updatedEnemyPositions := make(map[int]map[int]struct{}, len(gv.enemyPositions))
+		for y, xMap := range gv.enemyPositions {
+			for x := range xMap {
+				position := vector2d{x: x, y: y}
 
-				position := &(*row)[j]
-				if position.y%2 == 0 {
-					position.x++
+				updatedPosition := position
+				if updatedPosition.y%2 == 0 {
+					updatedPosition.x++
 				} else {
-					position.x--
+					updatedPosition.x--
 				}
+
+				if _, isYPresent := updatedEnemyPositions[updatedPosition.y]; !isYPresent {
+					updatedEnemyPositions[updatedPosition.y] = make(map[int]struct{}, len(gv.enemyPositions[position.y]))
+				}
+
+				updatedEnemyPositions[updatedPosition.y][updatedPosition.x] = struct{}{}
 			}
 		}
+		gv.enemyPositions = updatedEnemyPositions
 	}
 }
 
@@ -137,23 +155,9 @@ func (gv *gameView) updateBullets() {
 }
 
 func (gv *gameView) handleCollisions() {
-	// Instead of nested loops, create a map for the enemies, iterate through the bullet and do a lookup on the map
-	enemyPositionMap := make(map[int]map[int]struct{})
-
-	// Convert enemy slice into map
-	for _, row := range gv.enemyPositions {
-		for _, position := range row {
-			if _, yIsPresent := enemyPositionMap[position.y]; !yIsPresent {
-				enemyPositionMap[position.y] = make(map[int]struct{})
-			}
-
-			enemyPositionMap[position.y][position.x] = struct{}{}
-		}
-	}
-
 	updatedBulletPositions := make([]vector2d, 0, len(gv.bulletPositions))
 	for _, position := range gv.bulletPositions {
-		xMap, yIsPresent := enemyPositionMap[position.y]
+		xMap, yIsPresent := gv.enemyPositions[position.y]
 		_, xIsPresent := xMap[position.x]
 		collision := yIsPresent && xIsPresent
 		if collision {
@@ -164,21 +168,6 @@ func (gv *gameView) handleCollisions() {
 		}
 	}
 
-	// Convert enemy map back into a slice
-	updatedEnemyPositions := make([][]vector2d, 5)
-	for i := range updatedEnemyPositions {
-		updatedEnemyPositions[i] = make([]vector2d, 0)
-	}
-	for y, xMap := range enemyPositionMap {
-		for x := range xMap {
-			enemyRowIndex := y - gv.enemyYOffset
-			enemyRow := &updatedEnemyPositions[enemyRowIndex]
-			position := vector2d{x: x, y: y}
-			*enemyRow = append(*enemyRow, position)
-		}
-	}
-
-	gv.enemyPositions = updatedEnemyPositions
 	gv.bulletPositions = updatedBulletPositions
 }
 
@@ -209,9 +198,9 @@ func newOutputMatrix() (outputMatrix [][]rune) {
 }
 
 func (gv *gameView) drawEnemies(outputMatrix *[][]rune) {
-	for _, row := range gv.enemyPositions {
-		for _, position := range row {
-			(*outputMatrix)[position.y][position.x] = '$'
+	for y, xMap := range gv.enemyPositions {
+		for x := range xMap {
+			(*outputMatrix)[y][x] = '$'
 		}
 	}
 }
