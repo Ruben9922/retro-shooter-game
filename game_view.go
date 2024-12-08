@@ -59,7 +59,7 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			if msg.String() == "enter" {
 				m.view = newGameView()
 			}
-			return m, nil
+			return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
 		}
 
 		switch msg.String() {
@@ -82,14 +82,14 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 		if !gv.gameOver {
 			gv.updateBullets()
 			gv.handleCollisions()
+			return m, bulletTickCmd()
 		}
-		return m, bulletTickCmd()
 	case enemyTickMsg:
 		if !gv.gameOver {
 			gv.updateEnemies()
 			gv.handleCollisions()
+			return m, enemyTickCmd()
 		}
-		return m, enemyTickCmd()
 	}
 	return m, nil
 }
