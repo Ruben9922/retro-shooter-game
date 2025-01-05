@@ -15,9 +15,11 @@ const enemySpacing = 1
 const enemyColumnCount = 10
 const playerMoveIncrement = 2
 
+type vector2dMap map[int]map[int]struct{}
+
 type gameView struct {
 	playerPosition vector2d
-	enemyPositions map[int]map[int]struct{}
+	enemyPositions vector2dMap
 	enemyYOffset   int // Easier to just store this instead of traversing through the map to find the min or max y value
 	tickCount      int
 	playerBullets  []vector2d
@@ -40,9 +42,9 @@ func newGameView() *gameView {
 	}
 }
 
-func generateEnemyPositions() (enemyPositions map[int]map[int]struct{}) {
+func generateEnemyPositions() (enemyPositions vector2dMap) {
 	const rowCount = 5
-	enemyPositions = make(map[int]map[int]struct{}, rowCount)
+	enemyPositions = make(vector2dMap, rowCount)
 	for i := 0; i < rowCount; i++ {
 		enemyPositions[i] = make(map[int]struct{}, enemyColumnCount)
 
@@ -99,6 +101,7 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			gv.updateEnemyBullets()
 			gv.handlePlayerBulletCollisions()
 			gv.handleEnemyBulletCollisions()
+			gv.handleBulletCollisions()
 
 			return m, bulletTickCmd()
 		}
@@ -132,7 +135,7 @@ func (gv *gameView) updateEnemies() {
 			gv.gameOver = true
 		} else {
 			// Else move enemies down
-			updatedEnemyPositions := make(map[int]map[int]struct{}, len(gv.enemyPositions))
+			updatedEnemyPositions := make(vector2dMap, len(gv.enemyPositions))
 			for y, xMap := range gv.enemyPositions {
 				for x := range xMap {
 					position := vector2d{x: x, y: y}
@@ -154,7 +157,7 @@ func (gv *gameView) updateEnemies() {
 		gv.tickCount++
 
 		// Move enemies left/right (move alternate rows in opposite directions, so 1st row left/right, then 2nd row right/left, etc.)
-		updatedEnemyPositions := make(map[int]map[int]struct{}, len(gv.enemyPositions))
+		updatedEnemyPositions := make(vector2dMap, len(gv.enemyPositions))
 		for y, xMap := range gv.enemyPositions {
 			for x := range xMap {
 				position := vector2d{x: x, y: y}
@@ -259,6 +262,8 @@ func (gv *gameView) canCollideWithPlayer(x int) bool {
 	return (x % playerMoveIncrement) == (gv.playerPosition.x % playerMoveIncrement)
 }
 
+// Handle collisions between player bullets and enemies
+// Remove player bullet and enemy
 func (gv *gameView) handlePlayerBulletCollisions() {
 	updatedBulletPositions := make([]vector2d, 0, len(gv.playerBullets))
 	for _, position := range gv.playerBullets {
@@ -282,7 +287,8 @@ func (gv *gameView) handlePlayerBulletCollisions() {
 	gv.playerBullets = updatedBulletPositions
 }
 
-// todo: handle collision between enemy bullet and player bullet (so player can shoot enemy bullets)
+// Handle collisions between enemy bullets and player
+// Remove the enemy bullet and decrement lives
 func (gv *gameView) handleEnemyBulletCollisions() {
 	updatedBulletPositions := make([]vector2d, 0, len(gv.enemyBullets))
 	for _, bulletPosition := range gv.enemyBullets {
@@ -296,6 +302,69 @@ func (gv *gameView) handleEnemyBulletCollisions() {
 		}
 	}
 	gv.enemyBullets = updatedBulletPositions
+}
+
+// Handle collisions between enemy bullets and player bullets
+// Remove both bullets (so player can shoot the enemy bullets to destroy them)
+func (gv *gameView) handleBulletCollisions() {
+	playerBulletsMap := vectorSliceToMap(gv.playerBullets)
+	enemyBulletsMap := vectorSliceToMap(gv.enemyBullets)
+
+	// Iterate through one of the maps and remove any matching items from both maps
+	for y, xMap := range playerBulletsMap {
+		for x := range xMap {
+			// Same x and y exists in both player bullets and enemy bullets so remove from enemy bullets
+			bullet := vector2d{x: x, y: y}
+			if enemyBulletsMap.checkIfPresent(bullet) {
+				enemyBulletsMap.delete(bullet)
+				playerBulletsMap.delete(bullet)
+			}
+		}
+	}
+
+	gv.playerBullets = playerBulletsMap.toSlice()
+	gv.enemyBullets = enemyBulletsMap.toSlice()
+}
+
+func vectorSliceToMap(s []vector2d) (m vector2dMap) {
+	m = make(vector2dMap)
+	for _, bullet := range s {
+		if _, present := m[bullet.y]; !present {
+			m[bullet.y] = make(map[int]struct{})
+		}
+		m[bullet.y][bullet.x] = struct{}{}
+	}
+	return
+}
+
+func (m vector2dMap) toSlice() (s []vector2d) {
+	s = make([]vector2d, 0)
+	for y, xMap := range m {
+		for x := range xMap {
+			s = append(s, vector2d{x: x, y: y})
+		}
+	}
+	return
+}
+
+// todo: refactor other vector2dMap deletions to use this method
+func (m vector2dMap) delete(v vector2d) {
+	delete(m[v.y], v.x)
+
+	// If the inner map is empty then delete corresponding entry in outer map as no longer needed
+	if len(m[v.y]) == 0 {
+		delete(m, v.y)
+	}
+}
+
+func (m vector2dMap) checkIfPresent(v vector2d) bool {
+	xMap, yPresent := m[v.y]
+	if !yPresent {
+		return false
+	}
+
+	_, xPresent := xMap[v.x]
+	return xPresent
 }
 
 func (gv *gameView) draw(model) string {
