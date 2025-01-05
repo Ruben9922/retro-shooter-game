@@ -20,6 +20,8 @@ type model struct {
 type enemyTickMsg time.Time
 type bulletTickMsg time.Time
 
+var emptyVector2d = vector2d{x: -1, y: -1}
+
 var accentColor = lipgloss.AdaptiveColor{
 	Light: "12",
 	Dark:  "4",
@@ -32,17 +34,15 @@ func initialModel() model {
 }
 
 func (m model) Init() tea.Cmd {
-	return enemyTickCmd()
+	return tea.Batch(enemyTickCmd(), bulletTickCmd())
 }
 
-// This runs all the time
 func enemyTickCmd() tea.Cmd {
-	return tea.Tick(900*time.Millisecond, func(t time.Time) tea.Msg {
+	return tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
 		return enemyTickMsg(t)
 	})
 }
 
-// This only runs if there are any bullets, it gets dynamically started/stopped as necessary when bullets are created/destroyed
 func bulletTickCmd() tea.Cmd {
 	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
 		return bulletTickMsg(t)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"math/rand/v2"
 	"strings"
 )
 
@@ -14,23 +15,27 @@ const enemySpacing = 1
 const enemyColumnCount = 10
 
 type gameView struct {
-	playerPosition  vector2d
-	enemyPositions  map[int]map[int]struct{}
-	enemyYOffset    int // Easier to just store this instead of traversing through the map to find the min y value
-	tickCount       int
-	bulletPositions []vector2d
-	score           int
-	gameOver        bool
-	paused          bool
+	playerPosition       vector2d
+	enemyPositions       map[int]map[int]struct{}
+	enemyYOffset         int // Easier to just store this instead of traversing through the map to find the min y value
+	tickCount            int
+	bulletPositions      []vector2d
+	score                int
+	gameOver             bool
+	paused               bool
+	enemyBulletPositions []vector2d
+	livesRemaining       int
 }
 
 func newGameView() *gameView {
 	return &gameView{
-		playerPosition:  vector2d{x: gameViewSize.x / 2, y: gameViewSize.y - 1},
-		enemyPositions:  generateEnemyPositions(),
-		tickCount:       0,
-		bulletPositions: make([]vector2d, 0),
-		score:           0,
+		playerPosition:       vector2d{x: gameViewSize.x / 2, y: gameViewSize.y - 1},
+		enemyPositions:       generateEnemyPositions(),
+		tickCount:            0,
+		bulletPositions:      make([]vector2d, 0),
+		score:                0,
+		enemyBulletPositions: make([]vector2d, 0),
+		livesRemaining:       3,
 	}
 }
 
@@ -60,7 +65,7 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			if msg.String() == "enter" {
 				m.view = newGameView()
 			}
-			return m, enemyTickCmd()
+			return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
 		}
 
 		if gv.paused {
@@ -68,11 +73,7 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 				gv.paused = false
 			}
 
-			if len(gv.bulletPositions) > 0 {
-				return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
-			} else {
-				return m, enemyTickCmd()
-			}
+			return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
 		}
 
 		switch msg.String() {
@@ -91,28 +92,25 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			}
 			gv.bulletPositions = append(gv.bulletPositions, newBullet)
 
-			// If there's only one bullet, the timer isn't running so we need to start it off
-			// If there's >1 bullet, the timer is already running so don't need to start it off again
-			if len(gv.bulletPositions) == 1 {
-				return m, bulletTickCmd()
-			}
+			return m, nil
 		case "p":
 			gv.paused = true
 		}
 	case bulletTickMsg:
 		if !gv.gameOver && !gv.paused {
 			gv.updateBullets()
+			gv.updateEnemyBullets()
 			gv.handleCollisions()
+			gv.handleEnemyBulletCollisions()
 
-			// If there aren't any bullets then effectively stop the timer by not returning a `bulletTickCmd`
-			if len(gv.bulletPositions) > 0 {
-				return m, bulletTickCmd()
-			}
+			return m, bulletTickCmd()
 		}
 	case enemyTickMsg:
 		if !gv.gameOver && !gv.paused {
 			gv.updateEnemies()
 			gv.handleCollisions()
+			gv.createEnemyBulletPositions()
+
 			return m, enemyTickCmd()
 		}
 	}
@@ -186,6 +184,77 @@ func (gv *gameView) updateBullets() {
 	gv.bulletPositions = updatedPositions
 }
 
+func (gv *gameView) updateEnemyBullets() {
+	updatedPositions := make([]vector2d, 0, len(gv.enemyBulletPositions))
+	for _, position := range gv.enemyBulletPositions {
+		position.y++
+
+		if isPositionValid(position) {
+			updatedPositions = append(updatedPositions, position)
+		}
+	}
+	gv.enemyBulletPositions = updatedPositions
+}
+
+func (gv *gameView) createEnemyBulletPositions() {
+	// On every tick, randomly decide whether *any* enemy should shoot a bullet
+	// If so, then randomly pick an enemy that will shoot
+	// Probability of any enemy shooting a bullet is proportional to the number of enemies
+	// Otherwise the enemies will appear more aggressive as more of them are killed
+	if rand.IntN(3) == 0 {
+		if bullet := gv.createEnemyBullet(); bullet != emptyVector2d {
+			gv.enemyBulletPositions = append(gv.enemyBulletPositions, bullet)
+		}
+	}
+}
+
+func (gv *gameView) createEnemyBullet() vector2d {
+	// Convert map to slice of keys (y values), then randomly pick one
+	ys := make([]int, 0, len(gv.enemyPositions))
+	for y, xs := range gv.enemyPositions {
+		containsValidXValues := false
+		for x := range xs {
+			// Currently the player can only move in increments of 2, so only pick positions that would actually hit the player
+			if gv.canCollideWithPlayer(x) {
+				containsValidXValues = true
+				break
+			}
+		}
+
+		if containsValidXValues {
+			ys = append(ys, y)
+		}
+	}
+
+	if len(ys) == 0 {
+		return emptyVector2d
+	}
+
+	yIndex := rand.IntN(len(ys))
+	y := ys[yIndex]
+
+	// Convert map to slice of keys (x values), then randomly pick one
+	xs := make([]int, 0, len(gv.enemyPositions[y]))
+	for x := range gv.enemyPositions[y] {
+		// Currently the player can only move in increments of 2, so only pick positions that would actually hit the player
+		if gv.canCollideWithPlayer(x) {
+			xs = append(xs, x)
+		}
+	}
+
+	xIndex := rand.IntN(len(xs))
+	x := xs[xIndex]
+
+	enemyBulletPosition := vector2d{x: x, y: y}
+
+	return enemyBulletPosition
+}
+
+func (gv *gameView) canCollideWithPlayer(x int) bool {
+	playerMoveIncrement := enemySpacing + 1
+	return (x % playerMoveIncrement) == (gv.playerPosition.x % playerMoveIncrement)
+}
+
 func (gv *gameView) handleCollisions() {
 	updatedBulletPositions := make([]vector2d, 0, len(gv.bulletPositions))
 	for _, position := range gv.bulletPositions {
@@ -194,6 +263,12 @@ func (gv *gameView) handleCollisions() {
 		collision := yIsPresent && xIsPresent
 		if collision {
 			delete(xMap, position.x)
+
+			// If the inner map is empty then delete corresponding entry in outer map as no longer needed
+			if len(xMap) == 0 {
+				delete(gv.enemyPositions, position.y)
+			}
+
 			gv.score++
 		} else {
 			updatedBulletPositions = append(updatedBulletPositions, position)
@@ -201,6 +276,22 @@ func (gv *gameView) handleCollisions() {
 	}
 
 	gv.bulletPositions = updatedBulletPositions
+}
+
+// todo: handle collision between enemy bullet and player bullet (so player can shoot enemy bullets)
+func (gv *gameView) handleEnemyBulletCollisions() {
+	updatedBulletPositions := make([]vector2d, 0, len(gv.enemyBulletPositions))
+	for _, bulletPosition := range gv.enemyBulletPositions {
+		if gv.playerPosition == bulletPosition {
+			gv.livesRemaining--
+			if gv.livesRemaining <= 0 {
+				gv.gameOver = true
+			}
+		} else {
+			updatedBulletPositions = append(updatedBulletPositions, bulletPosition)
+		}
+	}
+	gv.enemyBulletPositions = updatedBulletPositions
 }
 
 func (gv *gameView) draw(model) string {
@@ -213,10 +304,12 @@ func (gv *gameView) draw(model) string {
 	outputMatrix := newOutputMatrix()
 	gv.drawEnemies(&outputMatrix)
 	gv.drawBullets(&outputMatrix)
+	gv.drawEnemyBullets(&outputMatrix)
 	gv.drawPlayer(&outputMatrix)
 
 	mainString := outputMatrixToString(outputMatrix)
 	scoreString := fmt.Sprintf("Score: %d", gv.score)
+	livesString := fmt.Sprintf("Lives: %d", gv.livesRemaining)
 	var statusString string
 	if gv.gameOver {
 		statusString = "Game over! Press Enter to restart..."
@@ -224,7 +317,12 @@ func (gv *gameView) draw(model) string {
 		statusString = "Paused; press P to resume..."
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, style.Render(mainString), scoreString, lipgloss.NewStyle().PaddingTop(1).Render(statusString))
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		style.Render(mainString),
+		fmt.Sprintf("%s; %s", scoreString, livesString),
+		lipgloss.NewStyle().PaddingTop(1).Render(statusString),
+	)
 }
 
 func newOutputMatrix() (outputMatrix [][]rune) {
@@ -245,6 +343,12 @@ func (gv *gameView) drawEnemies(outputMatrix *[][]rune) {
 
 func (gv *gameView) drawBullets(outputMatrix *[][]rune) {
 	for _, position := range gv.bulletPositions {
+		(*outputMatrix)[position.y][position.x] = '.'
+	}
+}
+
+func (gv *gameView) drawEnemyBullets(outputMatrix *[][]rune) {
+	for _, position := range gv.enemyBulletPositions {
 		(*outputMatrix)[position.y][position.x] = '.'
 	}
 }
