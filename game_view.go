@@ -14,6 +14,8 @@ var gameViewSize = vector2d{x: 50, y: 15}
 const enemySpacing = 1
 const enemyColumnCount = 10
 const playerMoveIncrement = 2
+const scorePerEnemyHit = 100
+const scorePerBulletHit = 50
 
 type vector2dMap map[int]map[int]struct{}
 
@@ -278,7 +280,7 @@ func (gv *gameView) handlePlayerBulletCollisions() {
 				delete(gv.enemyPositions, position.y)
 			}
 
-			gv.score++
+			gv.score += scorePerEnemyHit
 		} else {
 			updatedBulletPositions = append(updatedBulletPositions, position)
 		}
@@ -317,6 +319,7 @@ func (gv *gameView) handleBulletCollisions() {
 			if enemyBulletsMap.checkIfPresent(playerBullet) {
 				playerBulletsMap.delete(playerBullet)
 				enemyBulletsMap.delete(playerBullet)
+				gv.score += scorePerBulletHit
 			}
 
 			// Note that bullets with an even vertical gap won't actually collide on the same point
@@ -325,6 +328,7 @@ func (gv *gameView) handleBulletCollisions() {
 			if enemyBulletsMap.checkIfPresent(pointAbovePlayerBullet) {
 				playerBulletsMap.delete(playerBullet)
 				enemyBulletsMap.delete(pointAbovePlayerBullet)
+				gv.score += scorePerBulletHit
 			}
 		}
 	}
