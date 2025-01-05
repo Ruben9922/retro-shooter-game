@@ -15,27 +15,27 @@ const enemySpacing = 1
 const enemyColumnCount = 10
 
 type gameView struct {
-	playerPosition       vector2d
-	enemyPositions       map[int]map[int]struct{}
-	enemyYOffset         int // Easier to just store this instead of traversing through the map to find the min y value
-	tickCount            int
-	bulletPositions      []vector2d
-	score                int
-	gameOver             bool
-	paused               bool
-	enemyBulletPositions []vector2d
-	livesRemaining       int
+	playerPosition vector2d
+	enemyPositions map[int]map[int]struct{}
+	enemyYOffset   int // Easier to just store this instead of traversing through the map to find the min or max y value
+	tickCount      int
+	playerBullets  []vector2d
+	score          int
+	gameOver       bool
+	paused         bool
+	enemyBullets   []vector2d
+	livesRemaining int
 }
 
 func newGameView() *gameView {
 	return &gameView{
-		playerPosition:       vector2d{x: gameViewSize.x / 2, y: gameViewSize.y - 1},
-		enemyPositions:       generateEnemyPositions(),
-		tickCount:            0,
-		bulletPositions:      make([]vector2d, 0),
-		score:                0,
-		enemyBulletPositions: make([]vector2d, 0),
-		livesRemaining:       3,
+		playerPosition: vector2d{x: gameViewSize.x / 2, y: gameViewSize.y - 1},
+		enemyPositions: generateEnemyPositions(),
+		tickCount:      0,
+		playerBullets:  make([]vector2d, 0),
+		score:          0,
+		enemyBullets:   make([]vector2d, 0),
+		livesRemaining: 3,
 	}
 }
 
@@ -86,11 +86,7 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 				gv.playerPosition.x += enemySpacing + 1
 			}
 		case " ":
-			newBullet := vector2d{
-				x: gv.playerPosition.x,
-				y: gameViewSize.y - 2,
-			}
-			gv.bulletPositions = append(gv.bulletPositions, newBullet)
+			gv.createPlayerBullet()
 
 			return m, nil
 		case "p":
@@ -98,9 +94,9 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 		}
 	case bulletTickMsg:
 		if !gv.gameOver && !gv.paused {
-			gv.updateBullets()
+			gv.updatePlayerBullets()
 			gv.updateEnemyBullets()
-			gv.handleCollisions()
+			gv.handlePlayerBulletCollisions()
 			gv.handleEnemyBulletCollisions()
 
 			return m, bulletTickCmd()
@@ -108,13 +104,21 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 	case enemyTickMsg:
 		if !gv.gameOver && !gv.paused {
 			gv.updateEnemies()
-			gv.handleCollisions()
-			gv.createEnemyBulletPositions()
+			gv.handlePlayerBulletCollisions()
+			gv.createEnemyBullets()
 
 			return m, enemyTickCmd()
 		}
 	}
 	return m, nil
+}
+
+func (gv *gameView) createPlayerBullet() {
+	newBullet := vector2d{
+		x: gv.playerPosition.x,
+		y: gameViewSize.y - 2,
+	}
+	gv.playerBullets = append(gv.playerBullets, newBullet)
 }
 
 func (gv *gameView) updateEnemies() {
@@ -172,38 +176,38 @@ func (gv *gameView) updateEnemies() {
 	}
 }
 
-func (gv *gameView) updateBullets() {
-	updatedPositions := make([]vector2d, 0, len(gv.bulletPositions))
-	for _, position := range gv.bulletPositions {
+func (gv *gameView) updatePlayerBullets() {
+	updatedPositions := make([]vector2d, 0, len(gv.playerBullets))
+	for _, position := range gv.playerBullets {
 		position.y--
 
 		if isPositionValid(position) {
 			updatedPositions = append(updatedPositions, position)
 		}
 	}
-	gv.bulletPositions = updatedPositions
+	gv.playerBullets = updatedPositions
 }
 
 func (gv *gameView) updateEnemyBullets() {
-	updatedPositions := make([]vector2d, 0, len(gv.enemyBulletPositions))
-	for _, position := range gv.enemyBulletPositions {
+	updatedPositions := make([]vector2d, 0, len(gv.enemyBullets))
+	for _, position := range gv.enemyBullets {
 		position.y++
 
 		if isPositionValid(position) {
 			updatedPositions = append(updatedPositions, position)
 		}
 	}
-	gv.enemyBulletPositions = updatedPositions
+	gv.enemyBullets = updatedPositions
 }
 
-func (gv *gameView) createEnemyBulletPositions() {
+func (gv *gameView) createEnemyBullets() {
 	// On every tick, randomly decide whether *any* enemy should shoot a bullet
 	// If so, then randomly pick an enemy that will shoot
 	// Probability of any enemy shooting a bullet is proportional to the number of enemies
 	// Otherwise the enemies will appear more aggressive as more of them are killed
 	if rand.IntN(3) == 0 {
 		if bullet := gv.createEnemyBullet(); bullet != emptyVector2d {
-			gv.enemyBulletPositions = append(gv.enemyBulletPositions, bullet)
+			gv.enemyBullets = append(gv.enemyBullets, bullet)
 		}
 	}
 }
@@ -255,9 +259,9 @@ func (gv *gameView) canCollideWithPlayer(x int) bool {
 	return (x % playerMoveIncrement) == (gv.playerPosition.x % playerMoveIncrement)
 }
 
-func (gv *gameView) handleCollisions() {
-	updatedBulletPositions := make([]vector2d, 0, len(gv.bulletPositions))
-	for _, position := range gv.bulletPositions {
+func (gv *gameView) handlePlayerBulletCollisions() {
+	updatedBulletPositions := make([]vector2d, 0, len(gv.playerBullets))
+	for _, position := range gv.playerBullets {
 		xMap, yIsPresent := gv.enemyPositions[position.y]
 		_, xIsPresent := xMap[position.x]
 		collision := yIsPresent && xIsPresent
@@ -275,13 +279,13 @@ func (gv *gameView) handleCollisions() {
 		}
 	}
 
-	gv.bulletPositions = updatedBulletPositions
+	gv.playerBullets = updatedBulletPositions
 }
 
 // todo: handle collision between enemy bullet and player bullet (so player can shoot enemy bullets)
 func (gv *gameView) handleEnemyBulletCollisions() {
-	updatedBulletPositions := make([]vector2d, 0, len(gv.enemyBulletPositions))
-	for _, bulletPosition := range gv.enemyBulletPositions {
+	updatedBulletPositions := make([]vector2d, 0, len(gv.enemyBullets))
+	for _, bulletPosition := range gv.enemyBullets {
 		if gv.playerPosition == bulletPosition {
 			gv.livesRemaining--
 			if gv.livesRemaining <= 0 {
@@ -291,7 +295,7 @@ func (gv *gameView) handleEnemyBulletCollisions() {
 			updatedBulletPositions = append(updatedBulletPositions, bulletPosition)
 		}
 	}
-	gv.enemyBulletPositions = updatedBulletPositions
+	gv.enemyBullets = updatedBulletPositions
 }
 
 func (gv *gameView) draw(model) string {
@@ -303,7 +307,7 @@ func (gv *gameView) draw(model) string {
 
 	outputMatrix := newOutputMatrix()
 	gv.drawEnemies(&outputMatrix)
-	gv.drawBullets(&outputMatrix)
+	gv.drawPlayerBullets(&outputMatrix)
 	gv.drawEnemyBullets(&outputMatrix)
 	gv.drawPlayer(&outputMatrix)
 
@@ -341,14 +345,14 @@ func (gv *gameView) drawEnemies(outputMatrix *[][]rune) {
 	}
 }
 
-func (gv *gameView) drawBullets(outputMatrix *[][]rune) {
-	for _, position := range gv.bulletPositions {
+func (gv *gameView) drawPlayerBullets(outputMatrix *[][]rune) {
+	for _, position := range gv.playerBullets {
 		(*outputMatrix)[position.y][position.x] = '.'
 	}
 }
 
 func (gv *gameView) drawEnemyBullets(outputMatrix *[][]rune) {
-	for _, position := range gv.enemyBulletPositions {
+	for _, position := range gv.enemyBullets {
 		(*outputMatrix)[position.y][position.x] = '.'
 	}
 }
