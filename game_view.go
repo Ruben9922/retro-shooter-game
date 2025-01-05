@@ -13,6 +13,7 @@ var gameViewSize = vector2d{x: 50, y: 15}
 
 const enemySpacing = 1
 const enemyColumnCount = 10
+const playerMoveIncrement = 2
 
 type gameView struct {
 	playerPosition vector2d
@@ -79,11 +80,11 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "left", "a":
 			if gv.playerPosition.x > 1 {
-				gv.playerPosition.x -= enemySpacing + 1
+				gv.playerPosition.x -= playerMoveIncrement
 			}
 		case "right", "d":
 			if gv.playerPosition.x < gameViewSize.x-2 {
-				gv.playerPosition.x += enemySpacing + 1
+				gv.playerPosition.x += playerMoveIncrement
 			}
 		case " ":
 			gv.createPlayerBullet()
@@ -255,7 +256,6 @@ func (gv *gameView) createEnemyBullet() vector2d {
 }
 
 func (gv *gameView) canCollideWithPlayer(x int) bool {
-	playerMoveIncrement := enemySpacing + 1
 	return (x % playerMoveIncrement) == (gv.playerPosition.x % playerMoveIncrement)
 }
 
