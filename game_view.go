@@ -313,11 +313,18 @@ func (gv *gameView) handleBulletCollisions() {
 	// Iterate through one of the maps and remove any matching items from both maps
 	for y, xMap := range playerBulletsMap {
 		for x := range xMap {
-			// Same x and y exists in both player bullets and enemy bullets so remove from enemy bullets
-			bullet := vector2d{x: x, y: y}
-			if enemyBulletsMap.checkIfPresent(bullet) {
-				enemyBulletsMap.delete(bullet)
-				playerBulletsMap.delete(bullet)
+			playerBullet := vector2d{x: x, y: y}
+			if enemyBulletsMap.checkIfPresent(playerBullet) {
+				playerBulletsMap.delete(playerBullet)
+				enemyBulletsMap.delete(playerBullet)
+			}
+
+			// Note that bullets with an even vertical gap won't actually collide on the same point
+			// Hence also checking the point above `playerBullet`
+			pointAbovePlayerBullet := vector2d{x: playerBullet.x, y: playerBullet.y + 1}
+			if enemyBulletsMap.checkIfPresent(pointAbovePlayerBullet) {
+				playerBulletsMap.delete(playerBullet)
+				enemyBulletsMap.delete(pointAbovePlayerBullet)
 			}
 		}
 	}
