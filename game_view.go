@@ -26,30 +26,33 @@ const (
 	paused
 	gameLost
 	gameWon
+	lifeLost
 )
 
 type gameView struct {
-	playerPosition vector2d
-	enemyPositions vector2dMap
-	enemyYOffset   int // Easier to just store this instead of traversing through the map to find the min or max y value
-	tickCount      int
-	playerBullets  []vector2d
-	score          int
-	status         status
-	enemyBullets   []vector2d
-	livesRemaining int
+	playerPosition    vector2d
+	enemyPositions    vector2dMap
+	enemyYOffset      int // Easier to just store this instead of traversing through the map to find the min or max y value
+	tickCount         int
+	playerBullets     []vector2d
+	score             int
+	status            status
+	enemyBullets      []vector2d
+	livesRemaining    int
+	lifeLostTickCount int
 }
 
 func newGameView() *gameView {
 	return &gameView{
-		playerPosition: vector2d{x: gameViewSize.x / 2, y: gameViewSize.y - 1},
-		enemyPositions: generateEnemyPositions(),
-		tickCount:      0,
-		playerBullets:  make([]vector2d, 0),
-		score:          0,
-		enemyBullets:   make([]vector2d, 0),
-		livesRemaining: 3,
-		status:         playing,
+		playerPosition:    vector2d{x: gameViewSize.x / 2, y: gameViewSize.y - 1},
+		enemyPositions:    generateEnemyPositions(),
+		tickCount:         0,
+		playerBullets:     make([]vector2d, 0),
+		score:             0,
+		enemyBullets:      make([]vector2d, 0),
+		livesRemaining:    3,
+		status:            playing,
+		lifeLostTickCount: 0,
 	}
 }
 
@@ -104,6 +107,7 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			case "p":
 				gv.status = paused
 			}
+		case lifeLost:
 		}
 	case bulletTickMsg:
 		if gv.status == playing {
@@ -113,6 +117,9 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			gv.handleEnemyBulletCollisions()
 			gv.handleBulletCollisions()
 
+			if gv.status == lifeLost && gv.lifeLostTickCount == 0 {
+				return m, tea.Batch(bulletTickCmd(), lifeLostTickCmd())
+			}
 			return m, bulletTickCmd()
 		}
 	case enemyTickMsg:
@@ -122,6 +129,20 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			gv.createEnemyBullets()
 
 			return m, enemyTickCmd()
+		}
+	case lifeLostTickMsg:
+		gv.lifeLostTickCount++
+
+		if gv.lifeLostTickCount < 6 {
+			return m, lifeLostTickCmd()
+		} else {
+			if gv.livesRemaining <= 0 {
+				gv.status = gameLost
+			} else {
+				gv.status = playing
+			}
+			gv.lifeLostTickCount = 0
+			return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
 		}
 	}
 	return m, nil
@@ -301,9 +322,7 @@ func (gv *gameView) handleEnemyBulletCollisions() {
 	for _, bulletPosition := range gv.enemyBullets {
 		if gv.playerPosition == bulletPosition {
 			gv.livesRemaining--
-			if gv.livesRemaining <= 0 {
-				gv.status = gameLost
-			}
+			gv.status = lifeLost
 		} else {
 			updatedBulletPositions = append(updatedBulletPositions, bulletPosition)
 		}
@@ -424,6 +443,8 @@ func (gv *gameView) getStatusString() string {
 		return "Paused; press P to resume..."
 	case gameWon:
 		return "You win! All enemies destroyed!\nPress Enter to restart..."
+	case lifeLost:
+		return "Lost a life!"
 	default:
 		return ""
 	}
@@ -458,7 +479,13 @@ func (gv *gameView) drawEnemyBullets(outputMatrix *[][]rune) {
 }
 
 func (gv *gameView) drawPlayer(outputMatrix *[][]rune) {
-	(*outputMatrix)[gv.playerPosition.y][gv.playerPosition.x] = '*'
+	var playerRune rune
+	if gv.status != lifeLost || gv.lifeLostTickCount%2 == 0 {
+		playerRune = '*'
+	} else {
+		playerRune = ' '
+	}
+	(*outputMatrix)[gv.playerPosition.y][gv.playerPosition.x] = playerRune
 }
 
 func outputMatrixToString(outputMatrix [][]rune) string {
