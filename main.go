@@ -20,6 +20,7 @@ type model struct {
 type enemyTickMsg time.Time
 type bulletTickMsg time.Time
 type lifeLostTickMsg time.Time
+type messageTickMsg time.Time
 
 var emptyVector2d = vector2d{x: -1, y: -1}
 
@@ -56,6 +57,12 @@ func lifeLostTickCmd() tea.Cmd {
 	})
 }
 
+func messageTickCmd() tea.Cmd {
+	return tea.Tick(1*time.Second, func(t time.Time) tea.Msg {
+		return messageTickMsg(t)
+	})
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -67,7 +74,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			return m.view.update(msg, m)
 		}
-	case enemyTickMsg, bulletTickMsg, lifeLostTickMsg:
+	case enemyTickMsg, bulletTickMsg, lifeLostTickMsg, messageTickMsg:
 		return m.view.update(msg, m)
 	}
 

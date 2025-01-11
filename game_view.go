@@ -33,18 +33,19 @@ const (
 )
 
 type gameView struct {
-	playerPosition            vector2d
-	enemyPositions            vector2dMap
-	enemyYOffset              int // Easier to just store this instead of traversing through the map to find the min or max y value
-	tickCount                 int
-	playerBullets             []vector2d
-	score                     int
-	status                    status
-	enemyBullets              []vector2d
-	livesRemaining            int
-	lifeLostTickCount         int
-	playerBulletCooldownTime  time.Time // Cooldown period so player can't just hold down the space key
-	playerBulletCooldownCount int
+	playerPosition                             vector2d
+	enemyPositions                             vector2dMap
+	enemyYOffset                               int // Easier to just store this instead of traversing through the map to find the min or max y value
+	tickCount                                  int
+	playerBullets                              []vector2d
+	score                                      int
+	status                                     status
+	enemyBullets                               []vector2d
+	livesRemaining                             int
+	lifeLostTickCount                          int
+	playerBulletCooldownTime                   time.Time // Cooldown period so player can't just hold down the space key
+	playerBulletCooldownCount                  int
+	displayPlayerBulletCooldownExceededMessage bool
 }
 
 func newGameView() *gameView {
@@ -113,6 +114,9 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 						gv.playerBulletCooldownCount = 0
 						gv.playerBulletCooldownTime = time.Now()
 					}
+				} else if !gv.displayPlayerBulletCooldownExceededMessage {
+					gv.displayPlayerBulletCooldownExceededMessage = true // For displaying message
+					return m, messageTickCmd()
 				}
 
 				return m, nil
@@ -156,6 +160,8 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			gv.lifeLostTickCount = 0
 			return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
 		}
+	case messageTickMsg:
+		gv.displayPlayerBulletCooldownExceededMessage = false
 	}
 	return m, nil
 }
@@ -458,9 +464,12 @@ func (gv *gameView) getStatusString() string {
 	case lifeLost:
 		return "Lost a life!"
 	case playing:
-		// A bit hacky - instead of a `tickCmd` I'm using the `gv.playerBulletCooldownTime` to hide the message after a few seconds
-		if !gv.playerBulletCooldownTime.IsZero() && gv.playerBulletCooldownCount == 0 && time.Now().Sub(gv.playerBulletCooldownTime) <= 1*time.Second {
-			return "Can't shoot; cooldown exceeded"
+		if gv.displayPlayerBulletCooldownExceededMessage {
+			playerBulletCooldownTimeRemaining := playerBulletCooldownDuration - time.Now().Sub(gv.playerBulletCooldownTime).Truncate(time.Millisecond)
+			if playerBulletCooldownTimeRemaining < 0 {
+				playerBulletCooldownTimeRemaining = 0
+			}
+			return fmt.Sprintf("Can't shoot; cooldown exceeded (%s remaining)", playerBulletCooldownTimeRemaining)
 		}
 		return ""
 	default:
