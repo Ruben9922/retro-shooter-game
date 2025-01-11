@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"math/rand/v2"
 	"strings"
+	"time"
 )
 
 // todo: decide on value properly later
@@ -16,6 +17,8 @@ const enemyColumnCount = 10
 const playerMoveIncrement = 2
 const scorePerEnemyHit = 100
 const scorePerBulletHit = 50
+const playerBulletCooldownDuration = 750 * time.Millisecond
+const playerBulletCooldownMaxCount = 5
 
 type vector2dMap map[int]map[int]struct{}
 
@@ -30,16 +33,18 @@ const (
 )
 
 type gameView struct {
-	playerPosition    vector2d
-	enemyPositions    vector2dMap
-	enemyYOffset      int // Easier to just store this instead of traversing through the map to find the min or max y value
-	tickCount         int
-	playerBullets     []vector2d
-	score             int
-	status            status
-	enemyBullets      []vector2d
-	livesRemaining    int
-	lifeLostTickCount int
+	playerPosition            vector2d
+	enemyPositions            vector2dMap
+	enemyYOffset              int // Easier to just store this instead of traversing through the map to find the min or max y value
+	tickCount                 int
+	playerBullets             []vector2d
+	score                     int
+	status                    status
+	enemyBullets              []vector2d
+	livesRemaining            int
+	lifeLostTickCount         int
+	playerBulletCooldownTime  time.Time // Cooldown period so player can't just hold down the space key
+	playerBulletCooldownCount int
 }
 
 func newGameView() *gameView {
@@ -101,7 +106,14 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 					gv.playerPosition.x += playerMoveIncrement
 				}
 			case " ":
-				gv.createPlayerBullet()
+				if gv.playerBulletCooldownTime.IsZero() || time.Now().Sub(gv.playerBulletCooldownTime) >= playerBulletCooldownDuration {
+					gv.createPlayerBullet()
+					gv.playerBulletCooldownCount++
+					if gv.playerBulletCooldownCount >= playerBulletCooldownMaxCount {
+						gv.playerBulletCooldownCount = 0
+						gv.playerBulletCooldownTime = time.Now()
+					}
+				}
 
 				return m, nil
 			case "p":
@@ -445,6 +457,12 @@ func (gv *gameView) getStatusString() string {
 		return "You win! All enemies destroyed!\nPress Enter to restart..."
 	case lifeLost:
 		return "Lost a life!"
+	case playing:
+		// A bit hacky - instead of a `tickCmd` I'm using the `gv.playerBulletCooldownTime` to hide the message after a few seconds
+		if !gv.playerBulletCooldownTime.IsZero() && gv.playerBulletCooldownCount == 0 && time.Now().Sub(gv.playerBulletCooldownTime) <= 1*time.Second {
+			return "Can't shoot; cooldown exceeded"
+		}
+		return ""
 	default:
 		return ""
 	}
