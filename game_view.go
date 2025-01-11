@@ -19,6 +19,15 @@ const scorePerBulletHit = 50
 
 type vector2dMap map[int]map[int]struct{}
 
+type status int
+
+const (
+	playing status = iota
+	paused
+	gameLost
+	gameWon
+)
+
 type gameView struct {
 	playerPosition vector2d
 	enemyPositions vector2dMap
@@ -26,8 +35,7 @@ type gameView struct {
 	tickCount      int
 	playerBullets  []vector2d
 	score          int
-	gameOver       bool
-	paused         bool
+	status         status
 	enemyBullets   []vector2d
 	livesRemaining int
 }
@@ -41,6 +49,7 @@ func newGameView() *gameView {
 		score:          0,
 		enemyBullets:   make([]vector2d, 0),
 		livesRemaining: 3,
+		status:         playing,
 	}
 }
 
@@ -66,39 +75,38 @@ func generateEnemyPositions() (enemyPositions vector2dMap) {
 func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if gv.gameOver {
+		switch gv.status {
+		case gameLost, gameWon:
 			if msg.String() == "enter" {
 				m.view = newGameView()
 			}
 			return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
-		}
-
-		if gv.paused {
+		case paused:
 			if msg.String() == "p" {
-				gv.paused = false
+				gv.status = playing
 			}
 
 			return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
-		}
+		case playing:
+			switch msg.String() {
+			case "left", "a":
+				if gv.playerPosition.x > 1 {
+					gv.playerPosition.x -= playerMoveIncrement
+				}
+			case "right", "d":
+				if gv.playerPosition.x < gameViewSize.x-2 {
+					gv.playerPosition.x += playerMoveIncrement
+				}
+			case " ":
+				gv.createPlayerBullet()
 
-		switch msg.String() {
-		case "left", "a":
-			if gv.playerPosition.x > 1 {
-				gv.playerPosition.x -= playerMoveIncrement
+				return m, nil
+			case "p":
+				gv.status = paused
 			}
-		case "right", "d":
-			if gv.playerPosition.x < gameViewSize.x-2 {
-				gv.playerPosition.x += playerMoveIncrement
-			}
-		case " ":
-			gv.createPlayerBullet()
-
-			return m, nil
-		case "p":
-			gv.paused = true
 		}
 	case bulletTickMsg:
-		if !gv.gameOver && !gv.paused {
+		if gv.status == playing {
 			gv.updatePlayerBullets()
 			gv.updateEnemyBullets()
 			gv.handlePlayerBulletCollisions()
@@ -108,7 +116,7 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			return m, bulletTickCmd()
 		}
 	case enemyTickMsg:
-		if !gv.gameOver && !gv.paused {
+		if gv.status == playing {
 			gv.updateEnemies()
 			gv.handlePlayerBulletCollisions()
 			gv.createEnemyBullets()
@@ -134,7 +142,7 @@ func (gv *gameView) updateEnemies() {
 
 		if gv.enemyYOffset+len(gv.enemyPositions)-1 >= gameViewSize.y-2 {
 			// If enemies have reached the bottom of the screen then it's game over
-			gv.gameOver = true
+			gv.status = gameLost
 		} else {
 			// Else move enemies down
 			updatedEnemyPositions := make(vector2dMap, len(gv.enemyPositions))
@@ -274,6 +282,10 @@ func (gv *gameView) handlePlayerBulletCollisions() {
 			gv.enemyPositions.delete(position)
 
 			gv.score += scorePerEnemyHit
+
+			if gv.enemyPositions.count() == 0 {
+				gv.status = gameWon
+			}
 		} else {
 			updatedBulletPositions = append(updatedBulletPositions, position)
 		}
@@ -290,7 +302,7 @@ func (gv *gameView) handleEnemyBulletCollisions() {
 		if gv.playerPosition == bulletPosition {
 			gv.livesRemaining--
 			if gv.livesRemaining <= 0 {
-				gv.gameOver = true
+				gv.status = gameLost
 			}
 		} else {
 			updatedBulletPositions = append(updatedBulletPositions, bulletPosition)
@@ -370,6 +382,14 @@ func (m vector2dMap) checkIfPresent(v vector2d) bool {
 	return xPresent
 }
 
+func (m vector2dMap) count() (count int) {
+	count = 0
+	for _, xMap := range m {
+		count += len(xMap)
+	}
+	return
+}
+
 func (gv *gameView) draw(model) string {
 	border := lipgloss.RoundedBorder()
 	style := lipgloss.NewStyle().
@@ -386,12 +406,7 @@ func (gv *gameView) draw(model) string {
 	mainString := outputMatrixToString(outputMatrix)
 	scoreString := fmt.Sprintf("Score: %d", gv.score)
 	livesString := fmt.Sprintf("Lives: %d", gv.livesRemaining)
-	var statusString string
-	if gv.gameOver {
-		statusString = "Game over! Press Enter to restart..."
-	} else if gv.paused {
-		statusString = "Paused; press P to resume..."
-	}
+	statusString := gv.getStatusString()
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -399,6 +414,19 @@ func (gv *gameView) draw(model) string {
 		fmt.Sprintf("%s; %s", scoreString, livesString),
 		lipgloss.NewStyle().PaddingTop(1).Render(statusString),
 	)
+}
+
+func (gv *gameView) getStatusString() string {
+	switch gv.status {
+	case gameLost:
+		return "Game over! Press Enter to restart..."
+	case paused:
+		return "Paused; press P to resume..."
+	case gameWon:
+		return "You win! All enemies destroyed!\nPress Enter to restart..."
+	default:
+		return ""
+	}
 }
 
 func newOutputMatrix() (outputMatrix [][]rune) {
