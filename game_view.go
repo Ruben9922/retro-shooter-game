@@ -269,16 +269,9 @@ func (gv *gameView) canCollideWithPlayer(x int) bool {
 func (gv *gameView) handlePlayerBulletCollisions() {
 	updatedBulletPositions := make([]vector2d, 0, len(gv.playerBullets))
 	for _, position := range gv.playerBullets {
-		xMap, yIsPresent := gv.enemyPositions[position.y]
-		_, xIsPresent := xMap[position.x]
-		collision := yIsPresent && xIsPresent
+		collision := gv.enemyPositions.checkIfPresent(position)
 		if collision {
-			delete(xMap, position.x)
-
-			// If the inner map is empty then delete corresponding entry in outer map as no longer needed
-			if len(xMap) == 0 {
-				delete(gv.enemyPositions, position.y)
-			}
+			gv.enemyPositions.delete(position)
 
 			gv.score += scorePerEnemyHit
 		} else {
@@ -358,7 +351,6 @@ func (m vector2dMap) toSlice() (s []vector2d) {
 	return
 }
 
-// todo: refactor other vector2dMap deletions to use this method
 func (m vector2dMap) delete(v vector2d) {
 	delete(m[v.y], v.x)
 
