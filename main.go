@@ -68,12 +68,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.windowSize = vector2d{x: msg.Width, y: msg.Height}
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
-			return m, tea.Quit
-		default:
-			return m.view.update(msg, m)
-		}
+		return m.view.update(msg, m)
 	case enemyTickMsg, bulletTickMsg, lifeLostTickMsg, messageTickMsg:
 		return m.view.update(msg, m)
 	}

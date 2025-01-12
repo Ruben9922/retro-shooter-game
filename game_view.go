@@ -29,6 +29,7 @@ type status int
 const (
 	playing status = iota
 	paused
+	quitConfirmation
 	gameLost
 	gameWon
 	lifeLost
@@ -48,6 +49,8 @@ type gameView struct {
 	playerBulletCooldownTime                   time.Time // Cooldown period so player can't just hold down the space key
 	playerBulletCooldownCount                  int
 	displayPlayerBulletCooldownExceededMessage bool
+	// For returning to previous status when `QuitConfirmationKeys.Cancel` is pressed
+	previousStatus status
 }
 
 func newGameView() *gameView {
@@ -83,23 +86,37 @@ func generateEnemyPositions() (enemyPositions vector2dMap) {
 	return
 }
 
+func (gv *gameView) switchToQuitConfirmationStatus() {
+	gv.previousStatus = gv.status
+	gv.status = quitConfirmation
+}
+
 func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch gv.status {
 		case gameLost, gameWon:
-			if key.Matches(msg, key_maps.GameOverKeys.Restart) {
+			switch {
+			case key.Matches(msg, key_maps.GameOverKeys.Restart):
 				m.view = newGameView()
+				return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
+			case key.Matches(msg, key_maps.GameOverKeys.Quit):
+				gv.switchToQuitConfirmationStatus()
 			}
-			// todo: move this inside above `if` statement?
-			return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
 		case paused:
 			switch {
 			case key.Matches(msg, key_maps.PauseKeys.Resume):
 				gv.status = playing
 				return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
 			case key.Matches(msg, key_maps.PauseKeys.Quit):
-				// todo: implement quit confirm dialog
+				gv.switchToQuitConfirmationStatus()
+			}
+		case quitConfirmation:
+			switch {
+			case key.Matches(msg, key_maps.QuitConfirmationKeys.Quit):
+				return m, tea.Quit
+			case key.Matches(msg, key_maps.QuitConfirmationKeys.Cancel):
+				gv.status = gv.previousStatus
 			}
 		case playing:
 			switch {
@@ -478,9 +495,10 @@ func (gv *gameView) getStatusString() string {
 			return fmt.Sprintf("Can't shoot; cooldown exceeded (%s remaining)", playerBulletCooldownTimeRemaining)
 		}
 		return ""
-	default:
-		return ""
+	case quitConfirmation:
+		return "Are you sure you want to quit?"
 	}
+	return ""
 }
 
 func (gv *gameView) getHelpString(m model) string {
@@ -489,13 +507,16 @@ func (gv *gameView) getHelpString(m model) string {
 		return m.help.View(key_maps.GameOverKeys)
 	case paused:
 		return m.help.View(key_maps.PauseKeys)
+	case quitConfirmation:
+		return m.help.View(key_maps.QuitConfirmationKeys)
 	case gameWon:
 		return m.help.View(key_maps.GameOverKeys)
 	case playing:
 		return m.help.View(key_maps.PlayingKeys)
-	default:
+	case lifeLost:
 		return ""
 	}
+	return ""
 }
 
 func newOutputMatrix() (outputMatrix [][]rune) {

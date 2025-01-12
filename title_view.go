@@ -16,9 +16,12 @@ func newTitleView() titleView {
 func (titleView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if key.Matches(msg, key_maps.TitleViewKeys.Start) {
+		switch {
+		case key.Matches(msg, key_maps.TitleViewKeys.Start):
 			m.view = newGameView()
 			return m, tea.Batch(enemyTickCmd(), bulletTickCmd())
+		case key.Matches(msg, key_maps.TitleViewKeys.Quit):
+			return m, tea.Quit
 		}
 	}
 	return m, nil
