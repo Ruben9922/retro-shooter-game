@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
+	"github.com/charmbracelet/bubbles/help"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"os"
 	"time"
 )
+
+var version = "dev"
 
 type vector2d struct {
 	x, y int
@@ -28,15 +31,16 @@ var accentColor = lipgloss.AdaptiveColor{
 	Light: "12",
 	Dark:  "4",
 }
+var secondaryTextStyle = help.New().Styles.ShortDesc
 
 func initialModel() model {
 	return model{
-		view: newGameView(),
+		view: newTitleView(),
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(enemyTickCmd(), bulletTickCmd())
+	return nil
 }
 
 func enemyTickCmd() tea.Cmd {
@@ -82,8 +86,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	mainView := lipgloss.PlaceHorizontal(m.windowSize.x, lipgloss.Center,
-		lipgloss.NewStyle().Padding(2, 4).Render(m.view.draw(m)))
+	mainView := lipgloss.PlaceHorizontal(
+		m.windowSize.x,
+		lipgloss.Center,
+		lipgloss.NewStyle().Padding(2, 4).Render(m.view.draw(m)),
+	)
 	return lipgloss.NewStyle().Height(m.windowSize.y).Render(mainView)
 }
 
