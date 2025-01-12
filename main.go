@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/charmbracelet/bubbles/help"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"os"
@@ -17,6 +18,7 @@ type vector2d struct {
 type model struct {
 	windowSize vector2d
 	view       view
+	help       help.Model
 }
 
 type enemyTickMsg time.Time
@@ -29,6 +31,7 @@ var emptyVector2d = vector2d{x: -1, y: -1}
 func initialModel() model {
 	return model{
 		view: newTitleView(),
+		help: help.New(),
 	}
 }
 

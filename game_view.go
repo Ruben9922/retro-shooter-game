@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"math/rand/v2"
+	"retro-shooter-game/key_maps"
 	"strings"
 	"time"
 )
@@ -86,27 +88,30 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch gv.status {
 		case gameLost, gameWon:
-			if msg.String() == "enter" {
+			if key.Matches(msg, key_maps.GameOverKeys.Restart) {
 				m.view = newGameView()
 			}
+			// todo: move this inside above `if` statement?
 			return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
 		case paused:
-			if msg.String() == "p" {
+			switch {
+			case key.Matches(msg, key_maps.PauseKeys.Resume):
 				gv.status = playing
+				return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
+			case key.Matches(msg, key_maps.PauseKeys.Quit):
+				// todo: implement quit confirm dialog
 			}
-
-			return m, tea.Batch(bulletTickCmd(), enemyTickCmd())
 		case playing:
-			switch msg.String() {
-			case "left", "a":
+			switch {
+			case key.Matches(msg, key_maps.PlayingKeys.Left):
 				if gv.playerPosition.x > 1 {
 					gv.playerPosition.x -= playerMoveIncrement
 				}
-			case "right", "d":
+			case key.Matches(msg, key_maps.PlayingKeys.Right):
 				if gv.playerPosition.x < gameViewSize.x-2 {
 					gv.playerPosition.x += playerMoveIncrement
 				}
-			case " ":
+			case key.Matches(msg, key_maps.PlayingKeys.Shoot):
 				if gv.playerBulletCooldownTime.IsZero() || time.Now().Sub(gv.playerBulletCooldownTime) >= playerBulletCooldownDuration {
 					gv.createPlayerBullet()
 					gv.playerBulletCooldownCount++
@@ -120,7 +125,7 @@ func (gv *gameView) update(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 				}
 
 				return m, nil
-			case "p":
+			case key.Matches(msg, key_maps.PlayingKeys.Pause):
 				gv.status = paused
 			}
 		case lifeLost:
@@ -427,7 +432,7 @@ func (m vector2dMap) count() (count int) {
 	return
 }
 
-func (gv *gameView) draw(model) string {
+func (gv *gameView) draw(m model) string {
 	border := lipgloss.RoundedBorder()
 	style := lipgloss.NewStyle().
 		BorderForeground(accentColor).
@@ -450,17 +455,18 @@ func (gv *gameView) draw(model) string {
 		style.Render(mainString),
 		fmt.Sprintf("%s; %s", scoreString, livesString),
 		lipgloss.NewStyle().PaddingTop(1).Render(statusString),
+		gv.getHelpString(m),
 	)
 }
 
 func (gv *gameView) getStatusString() string {
 	switch gv.status {
 	case gameLost:
-		return "Game over! Press Enter to restart..."
+		return "Game over!"
 	case paused:
-		return "Paused; press P to resume..."
+		return "Paused"
 	case gameWon:
-		return "You win! All enemies destroyed!\nPress Enter to restart..."
+		return "You win! All enemies destroyed!"
 	case lifeLost:
 		return "Lost a life!"
 	case playing:
@@ -472,6 +478,21 @@ func (gv *gameView) getStatusString() string {
 			return fmt.Sprintf("Can't shoot; cooldown exceeded (%s remaining)", playerBulletCooldownTimeRemaining)
 		}
 		return ""
+	default:
+		return ""
+	}
+}
+
+func (gv *gameView) getHelpString(m model) string {
+	switch gv.status {
+	case gameLost:
+		return m.help.View(key_maps.GameOverKeys)
+	case paused:
+		return m.help.View(key_maps.PauseKeys)
+	case gameWon:
+		return m.help.View(key_maps.GameOverKeys)
+	case playing:
+		return m.help.View(key_maps.PlayingKeys)
 	default:
 		return ""
 	}
