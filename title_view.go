@@ -37,5 +37,5 @@ func (titleView) draw(model) string {
 		lipgloss.NewStyle().PaddingBottom(2).Render(titleString),
 		controlsString,
 	)
-	return viewString
+	return lipgloss.NewStyle().Padding(1, 0).Render(viewString)
 }

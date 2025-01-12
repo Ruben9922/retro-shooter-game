@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/charmbracelet/bubbles/help"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"os"
@@ -26,12 +25,6 @@ type lifeLostTickMsg time.Time
 type messageTickMsg time.Time
 
 var emptyVector2d = vector2d{x: -1, y: -1}
-
-var accentColor = lipgloss.AdaptiveColor{
-	Light: "12",
-	Dark:  "4",
-}
-var secondaryTextStyle = help.New().Styles.ShortDesc
 
 func initialModel() model {
 	return model{
@@ -86,12 +79,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	titleBar := drawTitleBar(m, "Retro Shooter Game")
 	mainView := lipgloss.PlaceHorizontal(
 		m.windowSize.x,
 		lipgloss.Center,
-		lipgloss.NewStyle().Padding(2, 4).Render(m.view.draw(m)),
+		lipgloss.NewStyle().Padding(1, 1).Render(m.view.draw(m)),
 	)
-	return lipgloss.NewStyle().Height(m.windowSize.y).Render(mainView)
+	return lipgloss.NewStyle().Height(m.windowSize.y).Render(lipgloss.JoinVertical(lipgloss.Left, titleBar, mainView))
 }
 
 func main() {
